@@ -17,6 +17,8 @@ jobs:
         script: |
           cd ~/recoverpack-server 
 
+          echo "${{ secrets.BACK_ENV }}" > .env
+
           git pull origin main
 
           go build -o my-go-server
