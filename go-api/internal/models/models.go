@@ -21,6 +21,30 @@ type Project struct {
 	OccurredAt  string    `json:"occurredAt" firestore:"occurredAt"`
 	Description string    `json:"description" firestore:"description"`
 	CreatedAt   time.Time `json:"createdAt" firestore:"createdAt"`
+
+	// Reporter fields prefill the 피해자 정보 section of the official
+	// 자연재난 피해신고서. No resident registration number or bank account
+	// is collected here; those stay on the paper form the user fills by hand.
+	ReporterName    string `json:"reporterName" firestore:"reporterName"`
+	ReporterPhone   string `json:"reporterPhone" firestore:"reporterPhone"`
+	ReporterAddress string `json:"reporterAddress" firestore:"reporterAddress"`
+	ResidenceType   string `json:"residenceType" firestore:"residenceType"`
+
+	IndirectSupport IndirectSupport `json:"indirectSupport" firestore:"indirectSupport"`
+}
+
+// IndirectSupport mirrors the "3. 간접 지원" checklist on the official
+// 자연재난 피해신고서, so users can see which extra support to ask about
+// when they submit their damage report.
+type IndirectSupport struct {
+	GasUser                 bool `json:"gasUser" firestore:"gasUser"`
+	VehicleOwner            bool `json:"vehicleOwner" firestore:"vehicleOwner"`
+	PublicHousingRequest    bool `json:"publicHousingRequest" firestore:"publicHousingRequest"`
+	FamilyCrisisSupport     bool `json:"familyCrisisSupport" firestore:"familyCrisisSupport"`
+	HealthInsuranceArrears  bool `json:"healthInsuranceArrears" firestore:"healthInsuranceArrears"`
+	FineDeferralRequest     bool `json:"fineDeferralRequest" firestore:"fineDeferralRequest"`
+	DisasterLossDeduction   bool `json:"disasterLossDeduction" firestore:"disasterLossDeduction"`
+	WindFloodInsuranceOptIn bool `json:"windFloodInsuranceOptIn" firestore:"windFloodInsuranceOptIn"`
 }
 
 // ProjectFile represents the metadata of an uploaded file
