@@ -31,7 +31,7 @@ type SaveTimelineRequest struct {
 }
 
 // SaveTimelineHandler handles creating, updating or auto-generating chronological timeline events
-func SaveTimelineHandler(fbClient *firebase.Client, aiClient *ai.Client, disasterStore *disaster.Store, weatherClient *disaster.WeatherClient) gin.HandlerFunc {
+func SaveTimelineHandler(fbClient *firebase.Client, aiClient *ai.Client, disasterStore *disaster.Store, weatherClient *disaster.WeatherClient, asosClient *disaster.AsosClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		projectID := c.Param("projectId")
@@ -117,6 +117,29 @@ func SaveTimelineHandler(fbClient *firebase.Client, aiClient *ai.Client, disaste
 					}
 				}
 
+				// 4. Cross-reference the 기상청_지상(종관,ASOS) 시간자료
+				// 조회서비스 ("실측 기상 근거 자동 연결") for the same
+				// location/date. Unlike the forecast/특보 APIs this is actual
+				// recorded weather with no recency limit. Summarized into a
+				// single event (not one per hour) to keep the timeline
+				// readable. Never blocks the response: FetchObservations
+				// returns an empty slice on any lookup failure.
+				if asosClient != nil {
+					day := strings.SplitN(strings.TrimSpace(project.OccurredAt), " ", 2)[0]
+					observations := asosClient.FetchObservations(ctx, project.Location, day)
+					if summary, ok := summarizeAsosObservations(observations); ok {
+						now := time.Now()
+						finalEvents = append(finalEvents, models.TimelineEvent{
+							ID:          fmt.Sprintf("asos_%d", now.UnixNano()),
+							ProjectID:   projectID,
+							Title:       "기상 실측 자료 (ASOS)",
+							Description: summary,
+							EventDate:   day + " 00:00",
+							CreatedAt:   now,
+						})
+					}
+				}
+
 				sortEventsByDate(finalEvents)
 			}
 		} else {
@@ -177,4 +200,41 @@ func GetTimelineHandler(fbClient *firebase.Client) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, events)
 	}
+}
+
+// summarizeAsosObservations condenses a day of hourly ASOS observations into
+// a single human-readable line (total rainfall, peak hourly rainfall, peak
+// wind), so the timeline gets one evidence entry instead of up to 24. Returns
+// ok=false if there's nothing worth reporting.
+func summarizeAsosObservations(observations []disaster.AsosObservation) (string, bool) {
+	if len(observations) == 0 {
+		return "", false
+	}
+
+	var totalRain, peakRain, peakWind float64
+	var peakRainHour, peakWindHour, station string
+	for _, o := range observations {
+		totalRain += o.PrecipitationMM
+		if o.PrecipitationMM > peakRain {
+			peakRain = o.PrecipitationMM
+			peakRainHour = o.Time
+		}
+		if o.WindSpeedMs > peakWind {
+			peakWind = o.WindSpeedMs
+			peakWindHour = o.Time
+		}
+		if station == "" {
+			station = o.StationName
+		}
+	}
+
+	parts := []string{fmt.Sprintf("관측소: %s", station), fmt.Sprintf("일 강수량 합계 %.1fmm", totalRain)}
+	if peakRain > 0 {
+		parts = append(parts, fmt.Sprintf("시간당 최대 강수량 %.1fmm(%s)", peakRain, peakRainHour))
+	}
+	if peakWind > 0 {
+		parts = append(parts, fmt.Sprintf("최대 풍속 %.1fm/s(%s)", peakWind, peakWindHour))
+	}
+	parts = append(parts, "[출처: 기상청_지상(종관,ASOS) 시간자료 조회서비스]")
+	return strings.Join(parts, ", "), true
 }
