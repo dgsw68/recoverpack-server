@@ -9,8 +9,8 @@ import (
 )
 
 type UpdateEvidenceRequest struct {
-	Category string `json:"category"`
-	Caption  string `json:"caption"`
+	Category *string `json:"category"`
+	Caption  *string `json:"caption"`
 }
 
 // AnalyzeProjectHandler pulls all project files, triggers the Python AI analysis,
