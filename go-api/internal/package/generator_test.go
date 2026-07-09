@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"encoding/csv"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -102,5 +103,41 @@ func TestPackagePathRejectsTraversal(t *testing.T) {
 		if _, err := PackagePath(value); err == nil {
 			t.Errorf("PackagePath(%q) should fail", value)
 		}
+	}
+}
+
+func TestGenerateIncludesStoredOriginal(t *testing.T) {
+	t.Setenv("GENERATED_PACKAGES_DIR", t.TempDir())
+	originalPath := t.TempDir() + "/original.jpg"
+	original := []byte("original-evidence-bytes")
+	if err := os.WriteFile(originalPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := &models.Project{ID: "project-original", Title: "원본 포함 테스트"}
+	files := []models.ProjectFile{{
+		ID: "12345678-file", ProjectID: project.ID, FileName: "피해사진.jpg",
+		FileType: "image", MimeType: "image/jpeg", StoragePath: originalPath,
+	}}
+	evidence := []models.Evidence{{FileID: files[0].ID, Category: "floor_flooding"}}
+	if _, err := Generate(project, files, evidence, nil); err != nil {
+		t.Fatal(err)
+	}
+	path, _ := PackagePath(project.ID)
+	reader, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	foundOriginal, foundClassified := false, false
+	for _, entry := range reader.File {
+		if strings.HasPrefix(entry.Name, "03_피해사진_원본/") {
+			foundOriginal = true
+		}
+		if strings.HasPrefix(entry.Name, "04_피해사진_AI분류본/floor_flooding/") {
+			foundClassified = true
+		}
+	}
+	if !foundOriginal || !foundClassified {
+		t.Fatalf("original=%v classified=%v", foundOriginal, foundClassified)
 	}
 }

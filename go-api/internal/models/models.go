@@ -25,13 +25,16 @@ type Project struct {
 
 // ProjectFile represents the metadata of an uploaded file
 type ProjectFile struct {
-	ID        string    `json:"id" firestore:"id"`
-	ProjectID string    `json:"projectId" firestore:"projectId"`
-	FileName  string    `json:"fileName" firestore:"fileName"`
-	FileType  string    `json:"fileType" firestore:"fileType"`
-	FileURL   string    `json:"fileUrl" firestore:"fileUrl"`
-	MimeType  string    `json:"mimeType" firestore:"mimeType"`
-	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+	ID          string    `json:"id" firestore:"id"`
+	ProjectID   string    `json:"projectId" firestore:"projectId"`
+	FileName    string    `json:"fileName" firestore:"fileName"`
+	FileType    string    `json:"fileType" firestore:"fileType"`
+	FileURL     string    `json:"fileUrl" firestore:"fileUrl"`
+	MimeType    string    `json:"mimeType" firestore:"mimeType"`
+	Size        int64     `json:"size" firestore:"size"`
+	SHA256      string    `json:"sha256" firestore:"sha256"`
+	StoragePath string    `json:"-" firestore:"storagePath"`
+	CreatedAt   time.Time `json:"createdAt" firestore:"createdAt"`
 }
 
 // Evidence represents the AI-analyzed damage classification and description

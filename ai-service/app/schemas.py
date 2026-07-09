@@ -9,6 +9,7 @@ class FileAnalysisInput(BaseModel):
     file_type: str = Field(..., description="Type of the file (image, receipt, estimate, alert, etc.)")
     file_url: str = Field(..., description="Public download URL of the file")
     mime_type: str = Field(..., description="MIME type of the file")
+    content_base64: Optional[str] = Field(None, description="Base64-encoded uploaded image bytes")
 
 class AnalyzeImageRequest(BaseModel):
     project_id: str = Field(..., description="ID of the associated damage project")

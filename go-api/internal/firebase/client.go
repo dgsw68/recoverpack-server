@@ -3,7 +3,6 @@ package firebase
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -42,11 +41,12 @@ type Client struct {
 func NewClient() (*Client, error) {
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
 	credsJSON := os.Getenv("FIREBASE_CREDENTIALS_JSON")
+	credsFile := os.Getenv("FIREBASE_CREDENTIALS_FILE")
 	bucketName := os.Getenv("FIREBASE_STORAGE_BUCKET")
 
 	// If variables are missing, default to mock fallback
-	if projectID == "" || credsJSON == "" {
-		log.Println("[FIREBASE] Missing FIREBASE_PROJECT_ID or FIREBASE_CREDENTIALS_JSON. Initializing local in-memory Mock Database.")
+	if projectID == "" || (credsJSON == "" && credsFile == "") {
+		log.Println("[FIREBASE] Missing project ID or credentials. Initializing local in-memory Mock Database.")
 		return &Client{
 			isMock:     true,
 			users:      make(map[string]models.User),
@@ -67,7 +67,12 @@ func NewClient() (*Client, error) {
 		StorageBucket: bucketName,
 	}
 
-	opt := option.WithCredentialsJSON([]byte(credsJSON))
+	var opt option.ClientOption
+	if credsFile != "" {
+		opt = option.WithCredentialsFile(credsFile)
+	} else {
+		opt = option.WithCredentialsJSON([]byte(credsJSON))
+	}
 	app, err := firebase.NewApp(ctx, conf, opt)
 	if err != nil {
 		log.Printf("[FIREBASE] Connection failed: %v. Falling back to local in-memory Mock Database.", err)

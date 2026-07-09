@@ -3,11 +3,13 @@ package ai
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"recoverpack-server/go-api/internal/models"
@@ -36,11 +38,12 @@ func NewClient() *Client {
 // --- Request/Response DTOs mirroring FastAPI schemas ---
 
 type FileAnalysisInput struct {
-	ID       string `json:"id"`
-	FileName string `json:"file_name"`
-	FileType string `json:"file_type"`
-	FileURL  string `json:"file_url"`
-	MimeType string `json:"mime_type"`
+	ID            string `json:"id"`
+	FileName      string `json:"file_name"`
+	FileType      string `json:"file_type"`
+	FileURL       string `json:"file_url"`
+	MimeType      string `json:"mime_type"`
+	ContentBase64 string `json:"content_base64,omitempty"`
 }
 
 type AnalyzeImageRequest struct {
@@ -49,8 +52,8 @@ type AnalyzeImageRequest struct {
 }
 
 type EvidenceAnalysisItem struct {
-	FileID  string `json:"file_id"`
-	FileURL string `json:"file_url"`
+	FileID   string `json:"file_id"`
+	FileURL  string `json:"file_url"`
 	Category string `json:"category"`
 	Caption  string `json:"caption"`
 }
@@ -103,6 +106,11 @@ func (c *Client) AnalyzeFiles(ctx context.Context, projectID string, files []mod
 			FileType: f.FileType,
 			FileURL:  f.FileURL,
 			MimeType: f.MimeType,
+		}
+		if f.StoragePath != "" && strings.HasPrefix(f.MimeType, "image/") {
+			if content, err := os.ReadFile(f.StoragePath); err == nil {
+				inputFiles[i].ContentBase64 = base64.StdEncoding.EncodeToString(content)
+			}
 		}
 	}
 

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,8 +22,9 @@ import (
 const defaultPackageDir = "generated-packages"
 
 type generatedEntry struct {
-	name string
-	data []byte
+	name       string
+	data       []byte
+	sourcePath string
 }
 
 func packageDir() string {
@@ -40,9 +42,7 @@ func PackagePath(projectID string) (string, error) {
 	return filepath.Join(packageDir(), projectID+".zip"), nil
 }
 
-// Generate writes a submission-support ZIP using only verified, stored project data.
-// Original binaries are intentionally not fetched from arbitrary URLs. They will be
-// added after the upload/storage pipeline owns the source files.
+// Generate writes a submission-support ZIP using stored project data and originals.
 func Generate(
 	project *models.Project,
 	files []models.ProjectFile,
@@ -83,7 +83,7 @@ func Generate(
 			_ = temp.Close()
 			return nil, fmt.Errorf("create ZIP entry %s: %w", entry.name, err)
 		}
-		if _, err := writer.Write(entry.data); err != nil {
+		if err := writeEntry(writer, entry); err != nil {
 			_ = zw.Close()
 			_ = temp.Close()
 			return nil, fmt.Errorf("write ZIP entry %s: %w", entry.name, err)
@@ -142,20 +142,21 @@ func buildEntries(
 	}
 
 	entries := []generatedEntry{
-		{"00_안내문.txt", utf8BOM("리커버팩 제출 보조 자료입니다.\n공식 서류나 보상 가능 여부를 판단하는 문서가 아닙니다.\nAI 생성 문구와 시간 정보는 제출 전에 반드시 사용자가 확인해야 합니다.\n")},
-		{"01_접수용_요약.txt", utf8BOM(summary)},
-		{"02_첨부자료_색인.csv", indexCSV},
-		{"05_피해타임라인.csv", timelineCSV},
-		{"06_복붙용_피해설명문.txt", utf8BOM(project.Description + "\n")},
-		{"08_원본파일_검증목록.csv", verificationCSV},
-		{"09_구조화데이터.json", rawJSON},
+		{name: "00_안내문.txt", data: utf8BOM("리커버팩 제출 보조 자료입니다.\n공식 서류나 보상 가능 여부를 판단하는 문서가 아닙니다.\nAI 생성 문구와 시간 정보는 제출 전에 반드시 사용자가 확인해야 합니다.\n")},
+		{name: "01_접수용_요약.txt", data: utf8BOM(summary)},
+		{name: "02_첨부자료_색인.csv", data: indexCSV},
+		{name: "05_피해타임라인.csv", data: timelineCSV},
+		{name: "06_복붙용_피해설명문.txt", data: utf8BOM(project.Description + "\n")},
+		{name: "08_원본파일_검증목록.csv", data: verificationCSV},
+		{name: "09_구조화데이터.json", data: rawJSON},
 	}
+	entries = append(entries, originalEntries(files, evidence)...)
 
 	manifest, err := buildManifest(entries)
 	if err != nil {
 		return nil, err
 	}
-	return append(entries, generatedEntry{"10_패키지파일_SHA256.csv", manifest}), nil
+	return append(entries, generatedEntry{name: "10_패키지파일_SHA256.csv", data: manifest}), nil
 }
 
 func buildSummary(project *models.Project, files []models.ProjectFile, evidence []models.Evidence, timeline []models.TimelineEvent) string {
@@ -195,9 +196,12 @@ func buildTimelineCSV(events []models.TimelineEvent) ([]byte, error) {
 func buildVerificationCSV(files []models.ProjectFile) ([]byte, error) {
 	rows := [][]string{{"파일ID", "파일명", "원본URL", "SHA-256", "검증상태"}}
 	for _, file := range files {
+		status := "원본 바이너리 미보관 - 해시 생성 불가"
+		if file.StoragePath != "" && file.SHA256 != "" {
+			status = "서버 보관 원본 해시 생성 완료"
+		}
 		rows = append(rows, []string{
-			file.ID, file.FileName, file.FileURL, "",
-			"원본 바이너리 미보관 - 해시 생성 불가",
+			file.ID, file.FileName, file.FileURL, file.SHA256, status,
 		})
 	}
 	return encodeCSV(rows)
@@ -206,10 +210,74 @@ func buildVerificationCSV(files []models.ProjectFile) ([]byte, error) {
 func buildManifest(entries []generatedEntry) ([]byte, error) {
 	rows := [][]string{{"패키지 내부 파일", "SHA-256"}}
 	for _, entry := range entries {
-		sum := sha256.Sum256(entry.data)
-		rows = append(rows, []string{entry.name, hex.EncodeToString(sum[:])})
+		checksum, err := entryChecksum(entry)
+		if err != nil {
+			return nil, fmt.Errorf("hash %s: %w", entry.name, err)
+		}
+		rows = append(rows, []string{entry.name, checksum})
 	}
 	return encodeCSV(rows)
+}
+
+func originalEntries(files []models.ProjectFile, evidence []models.Evidence) []generatedEntry {
+	categoryByFile := make(map[string]string, len(evidence))
+	for _, item := range evidence {
+		categoryByFile[item.FileID] = sanitizeZipName(item.Category)
+	}
+	var entries []generatedEntry
+	for _, file := range files {
+		if file.StoragePath == "" {
+			continue
+		}
+		prefixLength := min(8, len(file.ID))
+		name := file.ID[:prefixLength] + "_" + sanitizeZipName(file.FileName)
+		folder := "03_피해사진_원본"
+		if file.FileType == "receipt" || file.FileType == "estimate" {
+			folder = "07_영수증_견적서"
+		}
+		entries = append(entries, generatedEntry{
+			name: folder + "/" + name, sourcePath: file.StoragePath,
+		})
+		if category := categoryByFile[file.ID]; category != "" && strings.HasPrefix(file.MimeType, "image/") {
+			entries = append(entries, generatedEntry{
+				name:       "04_피해사진_AI분류본/" + category + "/" + name,
+				sourcePath: file.StoragePath,
+			})
+		}
+	}
+	return entries
+}
+
+func sanitizeZipName(value string) string {
+	value = filepath.Base(strings.ReplaceAll(value, "\\", "/"))
+	value = strings.ReplaceAll(value, "..", "_")
+	value = strings.TrimSpace(value)
+	if value == "" || value == "." {
+		return "unnamed"
+	}
+	return value
+}
+
+func writeEntry(writer io.Writer, entry generatedEntry) error {
+	if entry.sourcePath == "" {
+		_, err := writer.Write(entry.data)
+		return err
+	}
+	source, err := os.Open(entry.sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	_, err = io.Copy(writer, source)
+	return err
+}
+
+func entryChecksum(entry generatedEntry) (string, error) {
+	hasher := sha256.New()
+	if err := writeEntry(hasher, entry); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 func encodeCSV(rows [][]string) ([]byte, error) {

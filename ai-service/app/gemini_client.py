@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import logging
 import requests
 from io import BytesIO
@@ -47,7 +48,8 @@ async def analyze_evidence_item_gemini(
     file_name: str,
     file_type: str,
     file_url: str,
-    mime_type: str
+    mime_type: str,
+    content_base64: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Analyzes an evidence file using Gemini 1.5 Flash.
@@ -67,7 +69,12 @@ async def analyze_evidence_item_gemini(
         # If it's an image, fetch and include the image data
         image_data = None
         if mime_type.startswith("image/"):
-            image_data = fetch_image(file_url)
+            if content_base64:
+                image_data = Image.open(BytesIO(base64.b64decode(content_base64, validate=True)))
+                if image_data.mode not in ('RGB', 'RGBA'):
+                    image_data = image_data.convert('RGB')
+            else:
+                image_data = fetch_image(file_url)
 
         contents = []
         if image_data:

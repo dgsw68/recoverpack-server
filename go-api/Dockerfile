@@ -7,9 +7,8 @@ WORKDIR /app
 RUN apk add --no-cache git ca-certificates
 
 COPY go.mod ./
-RUN go mod download
-
 COPY . .
+RUN go mod tidy
 
 # Build the Go application binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server cmd/server/main.go

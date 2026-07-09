@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"recoverpack-server/go-api/internal/ai"
 	"recoverpack-server/go-api/internal/auth"
 	"recoverpack-server/go-api/internal/evidence"
@@ -61,7 +63,7 @@ func main() {
 		} else {
 			// Double check firestore availability
 			_, err := fbClient.GetProject(ctx, "ping-test")
-			if err != nil && err.Error() != "project not found" {
+			if err != nil && status.Code(err) != codes.NotFound {
 				dbStatus = "degraded"
 			}
 		}
@@ -90,7 +92,9 @@ func main() {
 		{
 			ownedProject.GET("", project.GetProjectHandler(fbClient))
 			ownedProject.POST("/files", file.AddFileHandler(fbClient))
+			ownedProject.POST("/uploads", file.UploadFilesHandler(fbClient))
 			ownedProject.GET("/files", file.GetFilesHandler(fbClient))
+			ownedProject.GET("/files/:fileId/content", file.DownloadFileHandler(fbClient))
 			ownedProject.POST("/analyze", evidence.AnalyzeProjectHandler(fbClient, aiClient))
 			ownedProject.GET("/evidence", evidence.GetEvidenceHandler(fbClient))
 			ownedProject.PATCH("/evidence/:evidenceId", evidence.UpdateEvidenceHandler(fbClient))

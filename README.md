@@ -112,7 +112,9 @@ RecoverPack is built on strict safety and legal guardrails to protect users:
 | `POST` | `/api/auth/login` | Log in and receive a Bearer token |
 | `GET` | `/api/auth/me` | Get the current authenticated user |
 | `POST` | `/api/projects` | Create a new damage project |
+| `POST` | `/api/projects/:projectId/uploads` | Upload original evidence files (`multipart/form-data`, field `files`) |
 | `POST` | `/api/projects/:projectId/files` | Register uploaded file metadata |
+| `GET` | `/api/projects/:projectId/files/:fileId/content` | Download an authenticated original file |
 | `POST` | `/api/projects/:projectId/analyze` | Request AI analysis of registered files |
 | `GET` | `/api/projects/:projectId/evidence` | Get list of analyzed evidence |
 | `PATCH`| `/api/projects/:projectId/evidence/:evidenceId` | Update user-edited category/caption |

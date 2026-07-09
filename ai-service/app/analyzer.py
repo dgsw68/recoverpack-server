@@ -123,7 +123,8 @@ async def analyze_images_or_fallback(
                 file_name=f.file_name,
                 file_type=f.file_type,
                 file_url=f.file_url,
-                mime_type=f.mime_type
+                mime_type=f.mime_type,
+                content_base64=f.content_base64
             )
             
         if result is None:
