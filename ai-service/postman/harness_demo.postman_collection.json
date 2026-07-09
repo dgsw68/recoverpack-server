@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "RecoverPack AI harness before/after demo",
+    "description": "Import this into Postman, run the server locally, and click the requests below to see real response times (bottom-right of the response panel). Run once against current code (after), then `git stash` the harness changes in ai-service/app/{harness.py,gemini_client.py,analyzer.py} and run again (before). Compare the Time value.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "project_id", "value": "harness-demo-project" }
+  ],
+  "item": [
+    {
+      "name": "0. Health check (confirms real Gemini mode)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health"
+      }
+    },
+    {
+      "name": "1. Analyze 8 files (parallel vs sequential timing)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/internal/analyze-image",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"project_id\": \"{{project_id}}\",\n  \"files\": [\n    { \"id\": \"1\", \"file_name\": \"floor_flooding_1.jpg\", \"file_type\": \"image\", \"file_url\": \"https://example.com/floor_flooding_1.jpg\", \"mime_type\": \"image/jpeg\" },\n    { \"id\": \"2\", \"file_name\": \"wall_damage_1.jpg\", \"file_type\": \"image\", \"file_url\": \"https://example.com/wall_damage_1.jpg\", \"mime_type\": \"image/jpeg\" },\n    { \"id\": \"3\", \"file_name\": \"appliance_damage_1.jpg\", \"file_type\": \"image\", \"file_url\": \"https://example.com/appliance_damage_1.jpg\", \"mime_type\": \"image/jpeg\" },\n    { \"id\": \"4\", \"file_name\": \"furniture_damage_1.jpg\", \"file_type\": \"image\", \"file_url\": \"https://example.com/furniture_damage_1.jpg\", \"mime_type\": \"image/jpeg\" },\n    { \"id\": \"5\", \"file_name\": \"receipt_1.jpg\", \"file_type\": \"receipt\", \"file_url\": \"https://example.com/receipt_1.jpg\", \"mime_type\": \"image/jpeg\" },\n    { \"id\": \"6\", \"file_name\": \"disaster_alert_1.jpg\", \"file_type\": \"alert\", \"file_url\": \"https://example.com/disaster_alert_1.jpg\", \"mime_type\": \"image/jpeg\" },\n    { \"id\": \"7\", \"file_name\": \"estimate_1.jpg\", \"file_type\": \"estimate\", \"file_url\": \"https://example.com/estimate_1.jpg\", \"mime_type\": \"image/jpeg\" },\n    { \"id\": \"8\", \"file_name\": \"floor_flooding_2.jpg\", \"file_type\": \"image\", \"file_url\": \"https://example.com/floor_flooding_2.jpg\", \"mime_type\": \"image/jpeg\" }\n  ]\n}"
+        }
+      }
+    },
+    {
+      "name": "2. Generate description (uses grounding check)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/internal/generate-description",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"project_id\": \"{{project_id}}\",\n  \"evidence\": [\n    { \"file_id\": \"1\", \"category\": \"floor_flooding\", \"caption\": \"거실 바닥 전체에 물 고임 및 침수 흔적이 확인됩니다.\" },\n    { \"file_id\": \"5\", \"category\": \"receipt\", \"caption\": \"누수 긴급 보수 인건비 결제 영수증입니다. 결제 금액은 150,000원입니다.\" }\n  ]\n}"
+        }
+      }
+    }
+  ]
+}
