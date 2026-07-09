@@ -2,6 +2,7 @@ package pckg
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/csv"
 	"io"
 	"os"
@@ -68,8 +69,11 @@ func TestGenerateCreatesDownloadableZip(t *testing.T) {
 
 	for _, expected := range []string{
 		"00_안내문.txt",
+		"01_접수용_1페이지_요약표.pdf",
 		"01_접수용_요약.txt",
+		"02_첨부자료_색인표.xlsx",
 		"02_첨부자료_색인.csv",
+		"05_재난문자_피해타임라인.pdf",
 		"05_피해타임라인.csv",
 		"06_복붙용_피해설명문.txt",
 		"08_원본파일_검증목록.csv",
@@ -86,14 +90,27 @@ func TestGenerateCreatesDownloadableZip(t *testing.T) {
 	if !strings.Contains(contents["05_피해타임라인.csv"], "피해 촬영") {
 		t.Error("timeline export does not contain timeline event")
 	}
+	if !strings.HasPrefix(contents["01_접수용_1페이지_요약표.pdf"], "%PDF-") {
+		t.Error("summary report is not a PDF")
+	}
+	xlsxReader, err := zip.NewReader(
+		bytes.NewReader([]byte(contents["02_첨부자료_색인표.xlsx"])),
+		int64(len(contents["02_첨부자료_색인표.xlsx"])),
+	)
+	if err != nil {
+		t.Fatalf("attachment index is not a valid XLSX archive: %v", err)
+	}
+	if len(xlsxReader.File) == 0 {
+		t.Error("attachment index XLSX is empty")
+	}
 
 	manifest := strings.TrimPrefix(contents["10_패키지파일_SHA256.csv"], "\uFEFF")
 	rows, err := csv.NewReader(strings.NewReader(manifest)).ReadAll()
 	if err != nil {
 		t.Fatalf("invalid manifest CSV: %v", err)
 	}
-	if len(rows) != 8 {
-		t.Fatalf("manifest rows = %d, want 8", len(rows))
+	if len(rows) != 11 {
+		t.Fatalf("manifest rows = %d, want 11", len(rows))
 	}
 }
 

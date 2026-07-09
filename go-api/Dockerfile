@@ -18,7 +18,7 @@ FROM alpine:latest
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata font-noto-cjk
 
 COPY --from=builder /app/server .
 
@@ -27,5 +27,6 @@ EXPOSE 8080
 
 ENV PORT=8080
 ENV GIN_MODE=release
+ENV RECOVERPACK_PDF_FONT=/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc
 
 CMD ["./server"]
