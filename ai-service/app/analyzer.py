@@ -1,3 +1,5 @@
+import asyncio
+import os
 import random
 import logging
 from typing import List, Dict, Any
@@ -11,6 +13,8 @@ from app.gemini_client import (
 from app.grounding import ground_text
 
 logger = logging.getLogger("ai-service")
+
+MAX_CONCURRENT_ANALYSIS = int(os.environ.get("MAX_CONCURRENT_ANALYSIS", "5"))
 
 # --- Realistic Mock Data for Local Testing & Fallback ---
 
@@ -110,41 +114,45 @@ async def analyze_images_or_fallback(
     project_id: str,
     files: List[FileAnalysisInput]
 ) -> List[Dict[str, Any]]:
-    """Analyzes a list of files. Uses Gemini if available, else falls back to heuristics."""
-    evidence_list = []
-    
+    """Analyzes a list of files concurrently. Uses Gemini if available, else falls back to heuristics."""
     use_gemini = is_gemini_available()
-    logger.info(f"Analyzing {len(files)} files for project {project_id}. Use Gemini: {use_gemini}")
-    
-    for f in files:
-        result = None
-        if use_gemini:
-            result = await analyze_evidence_item_gemini(
-                file_id=f.id,
-                file_name=f.file_name,
-                file_type=f.file_type,
-                file_url=f.file_url,
-                mime_type=f.mime_type,
-                content_base64=f.content_base64
-            )
-            
-        if result is None:
-            # Fallback to realistic mock generator
-            category = guess_category_by_heuristics(f.file_name, f.file_type)
-            # Pick a random realistic Korean caption based on category
-            caption = random.choice(MOCK_CAPTIONS.get(category, MOCK_CAPTIONS["other"]))
-            
-            result = {
-                "file_id": f.id,
-                "file_url": f.file_url,
-                "category": category,
-                "caption": caption
-            }
-            logger.info(f"Fallback/Mock result for file {f.id} (Category: {category})")
-            
-        evidence_list.append(result)
-        
-    return evidence_list
+    logger.info(
+        f"Analyzing {len(files)} files for project {project_id}. "
+        f"Use Gemini: {use_gemini}, max_concurrency: {MAX_CONCURRENT_ANALYSIS}"
+    )
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_ANALYSIS)
+
+    async def analyze_one(f: FileAnalysisInput) -> Dict[str, Any]:
+        async with semaphore:
+            result = None
+            if use_gemini:
+                result = await analyze_evidence_item_gemini(
+                    file_id=f.id,
+                    file_name=f.file_name,
+                    file_type=f.file_type,
+                    file_url=f.file_url,
+                    mime_type=f.mime_type,
+                    content_base64=f.content_base64
+                )
+
+            if result is None:
+                # Fallback to realistic mock generator
+                category = guess_category_by_heuristics(f.file_name, f.file_type)
+                # Pick a random realistic Korean caption based on category
+                caption = random.choice(MOCK_CAPTIONS.get(category, MOCK_CAPTIONS["other"]))
+
+                result = {
+                    "file_id": f.id,
+                    "file_url": f.file_url,
+                    "category": category,
+                    "caption": caption
+                }
+                logger.info(f"Fallback/Mock result for file {f.id} (Category: {category})")
+
+            return result
+
+    return list(await asyncio.gather(*(analyze_one(f) for f in files)))
 
 
 async def generate_description_or_fallback(
