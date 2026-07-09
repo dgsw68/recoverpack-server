@@ -21,6 +21,8 @@ const pdfFontFamily = "RecoverPackKorean"
 func pdfFontPath() (string, error) {
 	candidates := []string{
 		os.Getenv("RECOVERPACK_PDF_FONT"),
+		"/usr/share/fonts/noto/NotoSansCJK-Regular.ttf",
+		"/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",
 		"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
 		"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 		"/System/Library/Fonts/Supplemental/AppleGothic.ttf",
@@ -97,6 +99,9 @@ func buildSummaryPDF(project *models.Project, files []models.ProjectFile, eviden
 	}
 	pdf.AddPage()
 	pdfTitle(pdf, "재난 피해 증빙 요약표", "접수 담당자의 빠른 확인을 위한 제출 보조 자료")
+	pdfField(pdf, "신고인", project.ReporterName)
+	pdfField(pdf, "연락처", project.ReporterPhone)
+	pdfField(pdf, "신고인 주소", project.ReporterAddress)
 	pdfField(pdf, "프로젝트명", project.Title)
 	pdfField(pdf, "재난 유형", project.DamageType)
 	pdfField(pdf, "발생 일시", project.OccurredAt)
