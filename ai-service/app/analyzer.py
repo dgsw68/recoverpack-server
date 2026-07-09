@@ -204,74 +204,22 @@ async def generate_timeline_or_fallback(
         if timeline:
             return timeline
             
-    # Mock fallback timeline builder
-    logger.info("Building mock fallback timeline...")
-    events = []
-    
-    # 1. Alert (Start)
-    alert_item = next((e for e in evidence if e.category == "disaster_alert"), None)
-    if alert_item:
-        events.append({
-            "title": "집중호우 재난 문자 수신",
-            "description": alert_item.caption,
-            "event_date": "2026-07-09 13:00"
-        })
-    else:
-        events.append({
-            "title": "기상 특보 전파 및 호우 발령",
-            "description": "지방자치단체 및 소방 안전 안내 문자 전송, 호우 경보 발령으로 주민 사전 경계 강화.",
-            "event_date": "2026-07-09 12:00"
-        })
-        
-    # 2. Damage (Middle)
-    damage_items = [e for e in evidence if e.category in ["floor_flooding", "wall_damage", "appliance_damage", "furniture_damage", "other"]]
-    if damage_items:
-        for idx, item in enumerate(damage_items[:2]): # Limit to max 2 items to avoid overload
-            title_map = {
-                "floor_flooding": "바닥 침수 발생",
-                "wall_damage": "벽체 벽지 오염",
-                "appliance_damage": "가전제품 피해",
-                "furniture_damage": "가구 침수 파손",
-                "other": "현장 상황 확인"
-            }
-            title = title_map.get(item.category, "현장 피해 발견")
-            events.append({
-                "title": title,
-                "description": item.caption,
-                "event_date": f"2026-07-09 15:30"
-            })
-    else:
-        events.append({
-            "title": "침수 및 현장 누수 발견",
-            "description": "폭우 및 기상 오염으로 벽면 누수 및 바닥 고임 확인, 신속한 초기 양수 작업 실시.",
-            "event_date": "2026-07-09 16:00"
-        })
-        
-    # 3. Estimate/Receipt (End)
-    estimate_item = next((e for e in evidence if e.category == "estimate"), None)
-    if estimate_item:
-        events.append({
-            "title": "피해 복구 비용 견적 산출",
-            "description": estimate_item.caption,
-            "event_date": "2026-07-09 18:00"
-        })
-        
-    receipt_item = next((e for e in evidence if e.category == "receipt"), None)
-    if receipt_item:
-        events.append({
-            "title": "복구 조치 자재 구매 결제",
-            "description": receipt_item.caption,
-            "event_date": "2026-07-09 19:30"
-        })
-        
-    # If no estimate or receipt but we want to end with a summary
-    if not estimate_item and not receipt_item:
-        events.append({
-            "title": "피해 기록 보존 및 임시 복구 완료",
-            "description": "관리사무소 보고 및 보험 접수를 위해 사진 촬영 완료 및 추가 피해 확산 방지 작업 실시.",
-            "event_date": "2026-07-09 20:00"
-        })
-        
-    # Sort events by date just in case
-    events.sort(key=lambda x: x["event_date"])
-    return events
+    logger.info("Building evidence-only fallback timeline without invented timestamps.")
+    title_map = {
+        "disaster_alert": "재난 안내 자료",
+        "floor_flooding": "바닥 침수 자료",
+        "wall_damage": "벽면 피해 자료",
+        "appliance_damage": "가전제품 피해 자료",
+        "furniture_damage": "가구 피해 자료",
+        "estimate": "복구 견적 자료",
+        "receipt": "비용 지출 자료",
+        "other": "기타 증빙 자료",
+    }
+    return [
+        {
+            "title": title_map.get(item.category, "증빙 자료"),
+            "description": item.caption,
+            "event_date": "",
+        }
+        for item in evidence
+    ]
