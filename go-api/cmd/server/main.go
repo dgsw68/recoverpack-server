@@ -129,6 +129,7 @@ func main() {
 		protected.GET("/auth/me", auth.MeHandler())
 		protected.POST("/projects", project.CreateProjectHandler(fbClient))
 		protected.GET("/projects", project.ListProjectsHandler(fbClient))
+		protected.GET("/me/packages", pckg.ListMyPackagesHandler(fbClient))
 
 		ownedProject := protected.Group("/projects/:projectId")
 		ownedProject.Use(auth.RequireProjectOwner(fbClient))
