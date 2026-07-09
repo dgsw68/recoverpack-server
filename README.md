@@ -115,8 +115,13 @@ RecoverPack is built on strict safety and legal guardrails to protect users:
 | `PATCH`| `/api/projects/:projectId/evidence/:evidenceId` | Update user-edited category/caption |
 | `POST` | `/api/projects/:projectId/timeline` | Create or update timeline events |
 | `GET` | `/api/projects/:projectId/timeline` | Get list of timeline events |
-| `POST` | `/api/projects/:projectId/package` | Request final package generation (mock PDF/Zip url) |
-| `GET` | `/api/projects/:projectId/download` | Fetch package download URL |
+| `POST` | `/api/projects/:projectId/package` | Generate the current evidence package ZIP |
+| `GET` | `/api/projects/:projectId/download` | Download the generated ZIP file |
+
+The current ZIP contains UTF-8 text/CSV exports, structured JSON, and a
+SHA-256 manifest for generated artifacts. Original binaries and PDF/XLSX
+reports require the storage upload pipeline and are intentionally marked as
+unavailable rather than fabricated.
 
 ### Python AI Service (`ai-service`)
 

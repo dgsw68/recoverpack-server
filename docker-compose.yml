@@ -14,6 +14,9 @@ services:
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
       - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON}
       - FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}
+      - GENERATED_PACKAGES_DIR=/data/generated-packages
+    volumes:
+      - generated-packages:/data/generated-packages
     depends_on:
       - ai-service
     restart: always
@@ -29,3 +32,6 @@ services:
       - PORT=8000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     restart: always
+
+volumes:
+  generated-packages:
