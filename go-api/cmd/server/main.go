@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"recoverpack-server/go-api/internal/ai"
 	"recoverpack-server/go-api/internal/auth"
+	"recoverpack-server/go-api/internal/disaster"
 	"recoverpack-server/go-api/internal/evidence"
 	"recoverpack-server/go-api/internal/file"
 	"recoverpack-server/go-api/internal/firebase"
@@ -44,6 +45,32 @@ func main() {
 
 	// 3. Initialize AI Service Client
 	aiClient := ai.NewClient()
+
+	// 3b. Load 긴급재난문자 disaster alert data from local CSV export
+	// (stand-in until data.go.kr API approval comes through).
+	disasterCSVPath := os.Getenv("DISASTER_ALERT_CSV")
+	if disasterCSVPath == "" {
+		disasterCSVPath = "data/disaster_alerts.csv"
+	}
+	disasterStore, err := disaster.LoadStore(disasterCSVPath)
+	if err != nil {
+		log.Printf("[DISASTER] Failed to load disaster alert CSV from %s: %v", disasterCSVPath, err)
+		disasterStore = &disaster.Store{}
+	} else {
+		log.Printf("[DISASTER] Loaded %d disaster alerts from %s", disasterStore.Len(), disasterCSVPath)
+	}
+
+	// 3c. 기상청_기상특보 조회서비스 client ("공식 재난상황 근거 자동 연결").
+	// Works with an empty key too: FetchAlerts then just returns no alerts
+	// instead of erroring, so the rest of the service is unaffected while
+	// the key is pending.
+	weatherClient := disaster.NewWeatherClient(
+		os.Getenv("KMA_SPECIAL_WEATHER_API_KEY"),
+		os.Getenv("KMA_API_BASE_URL"),
+	)
+	if !weatherClient.Enabled() {
+		log.Println("[WEATHER] KMA_SPECIAL_WEATHER_API_KEY not set; /api/disaster/weather-alerts will return empty results.")
+	}
 
 	// 4. Initialize Gin Router
 	r := gin.New()
@@ -81,11 +108,14 @@ func main() {
 	{
 		api.POST("/auth/register", auth.RegisterHandler(fbClient))
 		api.POST("/auth/login", auth.LoginHandler(fbClient))
+		api.GET("/disaster-alerts", disaster.ListAlertsHandler(disasterStore))
+		api.GET("/disaster/weather-alerts", disaster.WeatherAlertsHandler(weatherClient))
 
 		protected := api.Group("")
 		protected.Use(auth.RequireAuth(fbClient))
 		protected.GET("/auth/me", auth.MeHandler())
 		protected.POST("/projects", project.CreateProjectHandler(fbClient))
+		protected.GET("/projects", project.ListProjectsHandler(fbClient))
 
 		ownedProject := protected.Group("/projects/:projectId")
 		ownedProject.Use(auth.RequireProjectOwner(fbClient))
@@ -98,7 +128,7 @@ func main() {
 			ownedProject.POST("/analyze", evidence.AnalyzeProjectHandler(fbClient, aiClient))
 			ownedProject.GET("/evidence", evidence.GetEvidenceHandler(fbClient))
 			ownedProject.PATCH("/evidence/:evidenceId", evidence.UpdateEvidenceHandler(fbClient))
-			ownedProject.POST("/timeline", timeline.SaveTimelineHandler(fbClient, aiClient))
+			ownedProject.POST("/timeline", timeline.SaveTimelineHandler(fbClient, aiClient, disasterStore, weatherClient))
 			ownedProject.GET("/timeline", timeline.GetTimelineHandler(fbClient))
 			ownedProject.POST("/package", pckg.GeneratePackageHandler(fbClient))
 			ownedProject.GET("/download", pckg.DownloadPackageHandler(fbClient))

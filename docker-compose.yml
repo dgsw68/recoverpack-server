@@ -15,6 +15,7 @@ services:
       - GENERATED_PACKAGES_DIR=/data/generated-packages
       - UPLOAD_DIR=/data/uploaded-files
       - AUTH_SECRET=${AUTH_SECRET:-recoverpack-local-development-secret-change-me}
+      - KMA_SPECIAL_WEATHER_API_KEY=${KMA_SPECIAL_WEATHER_API_KEY}
     volumes:
       - generated-packages:/data/generated-packages
       - uploaded-files:/data/uploaded-files
