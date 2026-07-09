@@ -53,6 +53,25 @@ func CreateProjectHandler(fbClient *firebase.Client) gin.HandlerFunc {
 	}
 }
 
+// ListProjectsHandler returns all projects owned by the authenticated user
+func ListProjectsHandler(fbClient *firebase.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, ok := auth.CurrentUser(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			return
+		}
+
+		projects, err := fbClient.ListProjectsByUser(c.Request.Context(), user.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list projects: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"projects": projects})
+	}
+}
+
 // GetProjectHandler retrieves project metadata
 func GetProjectHandler(fbClient *firebase.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -236,6 +237,42 @@ func (c *Client) GetProject(ctx context.Context, id string) (*models.Project, er
 		return nil, err
 	}
 	return &p, nil
+}
+
+func (c *Client) ListProjectsByUser(ctx context.Context, userID string) ([]models.Project, error) {
+	if c.isMock {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+		projects := make([]models.Project, 0)
+		for _, p := range c.projects {
+			if p.UserID == userID {
+				projects = append(projects, p)
+			}
+		}
+		sort.Slice(projects, func(i, j int) bool {
+			return projects[i].CreatedAt.After(projects[j].CreatedAt)
+		})
+		return projects, nil
+	}
+
+	var projects []models.Project
+	iter := c.firestoreClient.Collection("projects").Where("userId", "==", userID).OrderBy("createdAt", firestore.Desc).Documents(ctx)
+	defer iter.Stop()
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		var p models.Project
+		if err := doc.DataTo(&p); err != nil {
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+	return projects, nil
 }
 
 func (c *Client) UpdateProjectDescription(ctx context.Context, id string, desc string) error {
