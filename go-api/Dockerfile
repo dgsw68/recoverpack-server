@@ -21,6 +21,7 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates tzdata font-noto-cjk
 
 COPY --from=builder /app/server .
+COPY --from=builder /app/data ./data
 
 # Expose Go API port
 EXPOSE 8080
