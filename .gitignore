@@ -1,0 +1,28 @@
+# Version control
+.DS_Store
+*.local
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Go
+go-api/bin/
+go-api/tmp/
+go-api/.env
+go-api/go-api
+
+# Python
+ai-service/__pycache__/
+ai-service/venv/
+ai-service/.env
+ai-service/*.pyc
+
+# Docker
+.docker/
+
+# Firebase
+firebase-key.json
