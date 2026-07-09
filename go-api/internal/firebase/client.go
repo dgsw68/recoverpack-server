@@ -256,7 +256,7 @@ func (c *Client) ListProjectsByUser(ctx context.Context, userID string) ([]model
 	}
 
 	var projects []models.Project
-	iter := c.firestoreClient.Collection("projects").Where("userId", "==", userID).OrderBy("createdAt", firestore.Desc).Documents(ctx)
+	iter := c.firestoreClient.Collection("projects").Where("userId", "==", userID).Documents(ctx)
 	defer iter.Stop()
 	for {
 		doc, err := iter.Next()
@@ -272,6 +272,9 @@ func (c *Client) ListProjectsByUser(ctx context.Context, userID string) ([]model
 		}
 		projects = append(projects, p)
 	}
+	sort.Slice(projects, func(i, j int) bool {
+		return projects[i].CreatedAt.After(projects[j].CreatedAt)
+	})
 	return projects, nil
 }
 
@@ -291,6 +294,58 @@ func (c *Client) UpdateProjectDescription(ctx context.Context, id string, desc s
 	_, err := c.firestoreClient.Collection("projects").Doc(id).Update(ctx, []firestore.Update{
 		{Path: "description", Value: desc},
 	})
+	return err
+}
+
+// UpdateReporterInfo patches the reporter/피해자 정보 and 간접지원 checklist fields
+// used to prefill the official 자연재난 피해신고서. Only non-nil fields are changed.
+func (c *Client) UpdateReporterInfo(ctx context.Context, id string, name, phone, address, residenceType *string, indirect *models.IndirectSupport) error {
+	if c.isMock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		p, exists := c.projects[id]
+		if !exists {
+			return errors.New("project not found")
+		}
+		if name != nil {
+			p.ReporterName = *name
+		}
+		if phone != nil {
+			p.ReporterPhone = *phone
+		}
+		if address != nil {
+			p.ReporterAddress = *address
+		}
+		if residenceType != nil {
+			p.ResidenceType = *residenceType
+		}
+		if indirect != nil {
+			p.IndirectSupport = *indirect
+		}
+		c.projects[id] = p
+		return nil
+	}
+
+	var updates []firestore.Update
+	if name != nil {
+		updates = append(updates, firestore.Update{Path: "reporterName", Value: *name})
+	}
+	if phone != nil {
+		updates = append(updates, firestore.Update{Path: "reporterPhone", Value: *phone})
+	}
+	if address != nil {
+		updates = append(updates, firestore.Update{Path: "reporterAddress", Value: *address})
+	}
+	if residenceType != nil {
+		updates = append(updates, firestore.Update{Path: "residenceType", Value: *residenceType})
+	}
+	if indirect != nil {
+		updates = append(updates, firestore.Update{Path: "indirectSupport", Value: *indirect})
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	_, err := c.firestoreClient.Collection("projects").Doc(id).Update(ctx, updates)
 	return err
 }
 
@@ -398,7 +453,7 @@ func (c *Client) GetEvidenceByProject(ctx context.Context, projectID string) ([]
 	return evs, nil
 }
 
-func (c *Client) UpdateEvidence(ctx context.Context, projectID string, evidenceID string, category string, caption string) (*models.Evidence, error) {
+func (c *Client) UpdateEvidence(ctx context.Context, projectID string, evidenceID string, category *string, caption *string) (*models.Evidence, error) {
 	if c.isMock {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -408,8 +463,12 @@ func (c *Client) UpdateEvidence(ctx context.Context, projectID string, evidenceI
 		}
 		for i, ev := range evs {
 			if ev.ID == evidenceID {
-				evs[i].Category = category
-				evs[i].Caption = caption
+				if category != nil {
+					evs[i].Category = *category
+				}
+				if caption != nil {
+					evs[i].Caption = *caption
+				}
 				return &evs[i], nil
 			}
 		}
@@ -430,8 +489,12 @@ func (c *Client) UpdateEvidence(ctx context.Context, projectID string, evidenceI
 		return nil, fmt.Errorf("evidence does not belong to project %s", projectID)
 	}
 
-	ev.Category = category
-	ev.Caption = caption
+	if category != nil {
+		ev.Category = *category
+	}
+	if caption != nil {
+		ev.Caption = *caption
+	}
 
 	_, err = docRef.Set(ctx, ev)
 	if err != nil {
