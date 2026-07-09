@@ -123,6 +123,10 @@ func buildEntries(
 	if err != nil {
 		return nil, err
 	}
+	officialFormPDF, err := buildOfficialFormPDF(project, evidence)
+	if err != nil {
+		return nil, err
+	}
 	indexXLSX, err := buildAttachmentIndexXLSX(files, evidence)
 	if err != nil {
 		return nil, err
@@ -157,6 +161,7 @@ func buildEntries(
 		{name: "00_안내문.txt", data: utf8BOM("리커버팩 제출 보조 자료입니다.\n공식 서류나 보상 가능 여부를 판단하는 문서가 아닙니다.\nAI 생성 문구와 시간 정보는 제출 전에 반드시 사용자가 확인해야 합니다.\n")},
 		{name: "01_접수용_1페이지_요약표.pdf", data: summaryPDF},
 		{name: "01_접수용_요약.txt", data: utf8BOM(summary)},
+		{name: "01_자연재난_피해신고서_작성보조본.pdf", data: officialFormPDF},
 		{name: "02_첨부자료_색인표.xlsx", data: indexXLSX},
 		{name: "02_첨부자료_색인.csv", data: indexCSV},
 		{name: "05_재난문자_피해타임라인.pdf", data: timelinePDF},
