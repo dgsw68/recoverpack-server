@@ -72,6 +72,18 @@ func main() {
 		log.Println("[WEATHER] KMA_SPECIAL_WEATHER_API_KEY not set; /api/disaster/weather-alerts will return empty results.")
 	}
 
+	// 3d. 기상청_지상(종관, ASOS) 시간자료 조회서비스 client ("실측 기상 근거
+	// 자동 연결"). Reuses the same general KMA auth key as weatherClient.
+	// Unlike forecast APIs this has no recency limit, so it can support
+	// evidence for damage reported long after the fact.
+	asosClient := disaster.NewAsosClient(
+		os.Getenv("KMA_SPECIAL_WEATHER_API_KEY"),
+		os.Getenv("KMA_ASOS_API_BASE_URL"),
+	)
+	if !asosClient.Enabled() {
+		log.Println("[ASOS] KMA_SPECIAL_WEATHER_API_KEY not set; /api/disaster/asos-observations will return empty results.")
+	}
+
 	// 4. Initialize Gin Router
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -110,6 +122,7 @@ func main() {
 		api.POST("/auth/login", auth.LoginHandler(fbClient))
 		api.GET("/disaster-alerts", disaster.ListAlertsHandler(disasterStore))
 		api.GET("/disaster/weather-alerts", disaster.WeatherAlertsHandler(weatherClient))
+		api.GET("/disaster/asos-observations", disaster.AsosObservationsHandler(asosClient))
 
 		protected := api.Group("")
 		protected.Use(auth.RequireAuth(fbClient))
@@ -121,6 +134,7 @@ func main() {
 		ownedProject.Use(auth.RequireProjectOwner(fbClient))
 		{
 			ownedProject.GET("", project.GetProjectHandler(fbClient))
+			ownedProject.PATCH("/reporter", project.UpdateReporterInfoHandler(fbClient))
 			ownedProject.POST("/files", file.AddFileHandler(fbClient))
 			ownedProject.POST("/uploads", file.UploadFilesHandler(fbClient))
 			ownedProject.GET("/files", file.GetFilesHandler(fbClient))
@@ -128,7 +142,7 @@ func main() {
 			ownedProject.POST("/analyze", evidence.AnalyzeProjectHandler(fbClient, aiClient))
 			ownedProject.GET("/evidence", evidence.GetEvidenceHandler(fbClient))
 			ownedProject.PATCH("/evidence/:evidenceId", evidence.UpdateEvidenceHandler(fbClient))
-			ownedProject.POST("/timeline", timeline.SaveTimelineHandler(fbClient, aiClient, disasterStore, weatherClient))
+			ownedProject.POST("/timeline", timeline.SaveTimelineHandler(fbClient, aiClient, disasterStore, weatherClient, asosClient))
 			ownedProject.GET("/timeline", timeline.GetTimelineHandler(fbClient))
 			ownedProject.POST("/package", pckg.GeneratePackageHandler(fbClient))
 			ownedProject.GET("/download", pckg.DownloadPackageHandler(fbClient))
