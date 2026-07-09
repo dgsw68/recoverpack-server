@@ -93,6 +93,9 @@ func TestGenerateCreatesDownloadableZip(t *testing.T) {
 	if !strings.HasPrefix(contents["01_접수용_1페이지_요약표.pdf"], "%PDF-") {
 		t.Error("summary report is not a PDF")
 	}
+	if !strings.HasPrefix(contents["01_자연재난_피해신고서_작성보조본.pdf"], "%PDF-") {
+		t.Error("official form draft is not a PDF")
+	}
 	xlsxReader, err := zip.NewReader(
 		bytes.NewReader([]byte(contents["02_첨부자료_색인표.xlsx"])),
 		int64(len(contents["02_첨부자료_색인표.xlsx"])),
@@ -109,8 +112,8 @@ func TestGenerateCreatesDownloadableZip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invalid manifest CSV: %v", err)
 	}
-	if len(rows) != 11 {
-		t.Fatalf("manifest rows = %d, want 11", len(rows))
+	if len(rows) != 12 {
+		t.Fatalf("manifest rows = %d, want 12", len(rows))
 	}
 }
 
