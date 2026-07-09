@@ -2,11 +2,13 @@ package firebase
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +16,8 @@ import (
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"recoverpack-server/go-api/internal/models"
 )
 
@@ -25,6 +29,8 @@ type Client struct {
 
 	// In-memory data structures for mock mode
 	mu         sync.RWMutex
+	users      map[string]models.User
+	userEmails map[string]string
 	projects   map[string]models.Project
 	files      map[string][]models.ProjectFile
 	evidence   map[string][]models.Evidence
@@ -42,12 +48,14 @@ func NewClient() (*Client, error) {
 	if projectID == "" || credsJSON == "" {
 		log.Println("[FIREBASE] Missing FIREBASE_PROJECT_ID or FIREBASE_CREDENTIALS_JSON. Initializing local in-memory Mock Database.")
 		return &Client{
-			isMock:    true,
-			projects:  make(map[string]models.Project),
-			files:     make(map[string][]models.ProjectFile),
-			evidence:  make(map[string][]models.Evidence),
-			timelines: make(map[string][]models.TimelineEvent),
-			packages:  make(map[string]models.PackageInfo),
+			isMock:     true,
+			users:      make(map[string]models.User),
+			userEmails: make(map[string]string),
+			projects:   make(map[string]models.Project),
+			files:      make(map[string][]models.ProjectFile),
+			evidence:   make(map[string][]models.Evidence),
+			timelines:  make(map[string][]models.TimelineEvent),
+			packages:   make(map[string]models.PackageInfo),
 		}, nil
 	}
 
@@ -64,12 +72,14 @@ func NewClient() (*Client, error) {
 	if err != nil {
 		log.Printf("[FIREBASE] Connection failed: %v. Falling back to local in-memory Mock Database.", err)
 		return &Client{
-			isMock:    true,
-			projects:  make(map[string]models.Project),
-			files:     make(map[string][]models.ProjectFile),
-			evidence:  make(map[string][]models.Evidence),
-			timelines: make(map[string][]models.TimelineEvent),
-			packages:  make(map[string]models.PackageInfo),
+			isMock:     true,
+			users:      make(map[string]models.User),
+			userEmails: make(map[string]string),
+			projects:   make(map[string]models.Project),
+			files:      make(map[string][]models.ProjectFile),
+			evidence:   make(map[string][]models.Evidence),
+			timelines:  make(map[string][]models.TimelineEvent),
+			packages:   make(map[string]models.PackageInfo),
 		}, nil
 	}
 
@@ -77,12 +87,14 @@ func NewClient() (*Client, error) {
 	if err != nil {
 		log.Printf("[FIREBASE] Firestore client creation failed: %v. Falling back to local in-memory Mock Database.", err)
 		return &Client{
-			isMock:    true,
-			projects:  make(map[string]models.Project),
-			files:     make(map[string][]models.ProjectFile),
-			evidence:  make(map[string][]models.Evidence),
-			timelines: make(map[string][]models.TimelineEvent),
-			packages:  make(map[string]models.PackageInfo),
+			isMock:     true,
+			users:      make(map[string]models.User),
+			userEmails: make(map[string]string),
+			projects:   make(map[string]models.Project),
+			files:      make(map[string][]models.ProjectFile),
+			evidence:   make(map[string][]models.Evidence),
+			timelines:  make(map[string][]models.TimelineEvent),
+			packages:   make(map[string]models.PackageInfo),
 		}, nil
 	}
 
@@ -104,6 +116,84 @@ func (c *Client) Close() {
 // IsMock returns whether the client is in-memory fallback mode
 func (c *Client) IsMock() bool {
 	return c.isMock
+}
+
+// --- User Operations ---
+
+func (c *Client) CreateUser(ctx context.Context, user *models.User) error {
+	user.CreatedAt = time.Now()
+	user.Email = strings.ToLower(strings.TrimSpace(user.Email))
+	if c.isMock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if _, exists := c.userEmails[user.Email]; exists {
+			return errors.New("email already registered")
+		}
+		c.users[user.ID] = *user
+		c.userEmails[user.Email] = user.ID
+		return nil
+	}
+
+	emailKey := fmt.Sprintf("%x", sha256.Sum256([]byte(user.Email)))
+	emailRef := c.firestoreClient.Collection("userEmails").Doc(emailKey)
+	userRef := c.firestoreClient.Collection("users").Doc(user.ID)
+	return c.firestoreClient.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if _, err := tx.Get(emailRef); err == nil {
+			return errors.New("email already registered")
+		} else if status.Code(err) != codes.NotFound {
+			return err
+		}
+		if err := tx.Set(userRef, user); err != nil {
+			return err
+		}
+		return tx.Set(emailRef, map[string]string{"userId": user.ID})
+	})
+}
+
+func (c *Client) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if c.isMock {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+		id, exists := c.userEmails[email]
+		if !exists {
+			return nil, errors.New("user not found")
+		}
+		user := c.users[id]
+		return &user, nil
+	}
+
+	emailKey := fmt.Sprintf("%x", sha256.Sum256([]byte(email)))
+	emailDoc, err := c.firestoreClient.Collection("userEmails").Doc(emailKey).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	userID, ok := emailDoc.Data()["userId"].(string)
+	if !ok || userID == "" {
+		return nil, errors.New("invalid user email index")
+	}
+	return c.GetUserByID(ctx, userID)
+}
+
+func (c *Client) GetUserByID(ctx context.Context, id string) (*models.User, error) {
+	if c.isMock {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+		user, exists := c.users[id]
+		if !exists {
+			return nil, errors.New("user not found")
+		}
+		return &user, nil
+	}
+	doc, err := c.firestoreClient.Collection("users").Doc(id).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var user models.User
+	if err := doc.DataTo(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 // --- Project Operations ---
@@ -218,7 +308,7 @@ func (c *Client) SaveEvidence(ctx context.Context, evs []models.Evidence) error 
 			return nil
 		}
 		projectID := evs[0].ProjectID
-		
+
 		// Clear existing evidence for this project before re-saving (or overwrite/append intelligently)
 		// For MVP, overwriting the set of evidence on analysis re-run is standard.
 		c.evidence[projectID] = evs

@@ -2,9 +2,19 @@ package models
 
 import "time"
 
+// User is a locally authenticated RecoverPack account.
+type User struct {
+	ID           string    `json:"id" firestore:"id"`
+	Email        string    `json:"email" firestore:"email"`
+	Name         string    `json:"name" firestore:"name"`
+	PasswordHash string    `json:"-" firestore:"passwordHash"`
+	CreatedAt    time.Time `json:"createdAt" firestore:"createdAt"`
+}
+
 // Project represents a disaster damage project
 type Project struct {
 	ID          string    `json:"id" firestore:"id"`
+	UserID      string    `json:"userId" firestore:"userId"`
 	DamageType  string    `json:"damageType" firestore:"damageType"`
 	Title       string    `json:"title" firestore:"title"`
 	Location    string    `json:"location" firestore:"location"`

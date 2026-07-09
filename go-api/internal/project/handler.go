@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"recoverpack-server/go-api/internal/auth"
 	"recoverpack-server/go-api/internal/firebase"
 	"recoverpack-server/go-api/internal/models"
 )
@@ -24,10 +25,16 @@ func CreateProjectHandler(fbClient *firebase.Client) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
 			return
 		}
+		user, ok := auth.CurrentUser(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			return
+		}
 
 		projectID := uuid.New().String()
 		p := &models.Project{
 			ID:         projectID,
+			UserID:     user.ID,
 			DamageType: req.DamageType,
 			Title:      req.Title,
 			Location:   req.Location,

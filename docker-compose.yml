@@ -15,6 +15,7 @@ services:
       - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON}
       - FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}
       - GENERATED_PACKAGES_DIR=/data/generated-packages
+      - AUTH_SECRET=${AUTH_SECRET}
     volumes:
       - generated-packages:/data/generated-packages
     depends_on:

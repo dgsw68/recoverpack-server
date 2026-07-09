@@ -108,6 +108,9 @@ RecoverPack is built on strict safety and legal guardrails to protect users:
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/health` | Check health status of Go API server |
+| `POST` | `/api/auth/register` | Register with email/password and receive a Bearer token |
+| `POST` | `/api/auth/login` | Log in and receive a Bearer token |
+| `GET` | `/api/auth/me` | Get the current authenticated user |
 | `POST` | `/api/projects` | Create a new damage project |
 | `POST` | `/api/projects/:projectId/files` | Register uploaded file metadata |
 | `POST` | `/api/projects/:projectId/analyze` | Request AI analysis of registered files |
@@ -122,6 +125,10 @@ The current ZIP contains UTF-8 text/CSV exports, structured JSON, and a
 SHA-256 manifest for generated artifacts. Original binaries and PDF/XLSX
 reports require the storage upload pipeline and are intentionally marked as
 unavailable rather than fabricated.
+
+Every project endpoint requires an `Authorization: Bearer <accessToken>`
+header. Set `AUTH_SECRET` to a random value of at least 32 characters in
+deployed environments.
 
 ### Python AI Service (`ai-service`)
 

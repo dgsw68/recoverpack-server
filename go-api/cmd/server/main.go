@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"recoverpack-server/go-api/internal/ai"
+	"recoverpack-server/go-api/internal/auth"
 	"recoverpack-server/go-api/internal/evidence"
 	"recoverpack-server/go-api/internal/file"
 	"recoverpack-server/go-api/internal/firebase"
@@ -27,6 +28,9 @@ func main() {
 	// Set Gin mode
 	if os.Getenv("GIN_MODE") == "release" {
 		gin.SetMode(gin.ReleaseMode)
+		if len(os.Getenv("AUTH_SECRET")) < 32 {
+			log.Fatal("[CRITICAL] AUTH_SECRET must be at least 32 characters in release mode.")
+		}
 	}
 
 	// 2. Initialize Firebase Client (with in-memory mock fallback)
@@ -73,26 +77,28 @@ func main() {
 	// 7. Core API Endpoints
 	api := r.Group("/api")
 	{
-		// Project Endpoints
-		api.POST("/projects", project.CreateProjectHandler(fbClient))
-		api.GET("/projects/:projectId", project.GetProjectHandler(fbClient))
+		api.POST("/auth/register", auth.RegisterHandler(fbClient))
+		api.POST("/auth/login", auth.LoginHandler(fbClient))
 
-		// File Upload Metadata Endpoints
-		api.POST("/projects/:projectId/files", file.AddFileHandler(fbClient))
-		api.GET("/projects/:projectId/files", file.GetFilesHandler(fbClient))
+		protected := api.Group("")
+		protected.Use(auth.RequireAuth(fbClient))
+		protected.GET("/auth/me", auth.MeHandler())
+		protected.POST("/projects", project.CreateProjectHandler(fbClient))
 
-		// Evidence Endpoints (AI Analysis)
-		api.POST("/projects/:projectId/analyze", evidence.AnalyzeProjectHandler(fbClient, aiClient))
-		api.GET("/projects/:projectId/evidence", evidence.GetEvidenceHandler(fbClient))
-		api.PATCH("/projects/:projectId/evidence/:evidenceId", evidence.UpdateEvidenceHandler(fbClient))
-
-		// Timeline Endpoints
-		api.POST("/projects/:projectId/timeline", timeline.SaveTimelineHandler(fbClient, aiClient))
-		api.GET("/projects/:projectId/timeline", timeline.GetTimelineHandler(fbClient))
-
-		// Package / Report Endpoints
-		api.POST("/projects/:projectId/package", pckg.GeneratePackageHandler(fbClient))
-		api.GET("/projects/:projectId/download", pckg.DownloadPackageHandler(fbClient))
+		ownedProject := protected.Group("/projects/:projectId")
+		ownedProject.Use(auth.RequireProjectOwner(fbClient))
+		{
+			ownedProject.GET("", project.GetProjectHandler(fbClient))
+			ownedProject.POST("/files", file.AddFileHandler(fbClient))
+			ownedProject.GET("/files", file.GetFilesHandler(fbClient))
+			ownedProject.POST("/analyze", evidence.AnalyzeProjectHandler(fbClient, aiClient))
+			ownedProject.GET("/evidence", evidence.GetEvidenceHandler(fbClient))
+			ownedProject.PATCH("/evidence/:evidenceId", evidence.UpdateEvidenceHandler(fbClient))
+			ownedProject.POST("/timeline", timeline.SaveTimelineHandler(fbClient, aiClient))
+			ownedProject.GET("/timeline", timeline.GetTimelineHandler(fbClient))
+			ownedProject.POST("/package", pckg.GeneratePackageHandler(fbClient))
+			ownedProject.GET("/download", pckg.DownloadPackageHandler(fbClient))
+		}
 	}
 
 	// 8. Start HTTP Server
@@ -111,12 +117,11 @@ func main() {
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(24)
+			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
