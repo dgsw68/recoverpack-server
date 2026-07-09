@@ -30,6 +30,7 @@ class TimelineResult(BaseModel):
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash").strip()
+GEMINI_EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "text-embedding-004").strip()
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 if client:
@@ -40,6 +41,21 @@ else:
 
 def is_gemini_available() -> bool:
     return client is not None
+
+
+def embed_texts(texts: List[str]) -> Optional[List[List[float]]]:
+    """Embeds a list of texts for semantic grounding checks. Returns None if unavailable."""
+    if not client or not texts:
+        return None
+    try:
+        embeddings: List[List[float]] = []
+        for text in texts:
+            response = client.models.embed_content(model=GEMINI_EMBEDDING_MODEL, contents=text)
+            embeddings.append(response.embeddings[0].values)
+        return embeddings
+    except Exception as error:
+        logger.error("Gemini embedding failed: %s", error)
+        return None
 
 
 async def analyze_evidence_item_gemini(

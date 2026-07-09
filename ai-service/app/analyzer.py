@@ -8,6 +8,7 @@ from app.gemini_client import (
     generate_description_gemini,
     generate_timeline_gemini
 )
+from app.grounding import ground_text
 
 logger = logging.getLogger("ai-service")
 
@@ -156,8 +157,15 @@ async def generate_description_or_fallback(
     if is_gemini_available():
         desc = await generate_description_gemini(evidence_dicts)
         if desc:
-            return desc
-            
+            captions = [e.caption for e in evidence]
+            cleaned_desc, flagged = ground_text(desc, captions)
+            if flagged:
+                logger.warning(
+                    f"[project {project_id}] Grounding check removed {len(flagged)} "
+                    f"ungrounded sentence(s) from generated description."
+                )
+            return cleaned_desc
+
     # Professional Korean Fallback Template Builder
     logger.info("Building mock fallback overall description...")
     categories_present = set(e.category for e in evidence)
@@ -202,8 +210,17 @@ async def generate_timeline_or_fallback(
     if is_gemini_available():
         timeline = await generate_timeline_gemini(evidence_dicts)
         if timeline:
+            captions = [e.caption for e in evidence]
+            for event in timeline:
+                cleaned_description, flagged = ground_text(event.get("description", ""), captions)
+                if flagged:
+                    logger.warning(
+                        f"[project {project_id}] Grounding check removed {len(flagged)} "
+                        f"ungrounded sentence(s) from timeline event '{event.get('title')}'."
+                    )
+                event["description"] = cleaned_description
             return timeline
-            
+
     logger.info("Building evidence-only fallback timeline without invented timestamps.")
     title_map = {
         "disaster_alert": "재난 안내 자료",
