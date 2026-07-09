@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import logging
@@ -8,6 +9,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
+from app.harness import run_with_harness
 from app.prompts import (
     DESCRIPTION_GENERATION_SYSTEM,
     IMAGE_ANALYSIS_SYSTEM,
@@ -83,8 +85,8 @@ async def analyze_evidence_item_gemini(
         except (ValueError, TypeError) as error:
             logger.warning("Invalid embedded image for %s: %s", file_id, error)
 
-    try:
-        response = client.models.generate_content(
+    def _call():
+        return client.models.generate_content(
             model=GEMINI_MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
@@ -94,6 +96,15 @@ async def analyze_evidence_item_gemini(
                 temperature=0.1,
             ),
         )
+
+    response = await run_with_harness(
+        f"analyze_evidence_item:{file_id}",
+        lambda: asyncio.to_thread(_call),
+    )
+    if response is None:
+        return None
+
+    try:
         result = (
             response.parsed.model_dump()
             if isinstance(response.parsed, EvidenceResult)
@@ -106,7 +117,7 @@ async def analyze_evidence_item_gemini(
             "caption": result.get("caption", "자료에서 확인 가능한 설명이 없습니다."),
         }
     except Exception as error:
-        logger.error("Gemini image analysis failed for %s: %s", file_id, error)
+        logger.error("Gemini image analysis parsing failed for %s: %s", file_id, error)
         return None
 
 
@@ -119,8 +130,8 @@ async def generate_description_gemini(
         f"{index}. [{item['category']}] {item['caption']}"
         for index, item in enumerate(evidence_items, 1)
     )
-    try:
-        response = client.models.generate_content(
+    def _call():
+        return client.models.generate_content(
             model=GEMINI_MODEL,
             contents=f"다음 증빙 내역만 근거로 피해 설명문을 작성하세요.\n\n{evidence_text}",
             config=types.GenerateContentConfig(
@@ -128,10 +139,14 @@ async def generate_description_gemini(
                 temperature=0.1,
             ),
         )
-        return response.text.strip() if response.text else None
-    except Exception as error:
-        logger.error("Gemini description generation failed: %s", error)
+
+    response = await run_with_harness(
+        "generate_description",
+        lambda: asyncio.to_thread(_call),
+    )
+    if response is None:
         return None
+    return response.text.strip() if response.text else None
 
 
 async def generate_timeline_gemini(
@@ -143,8 +158,8 @@ async def generate_timeline_gemini(
         f"{index}. [{item['category']}] {item['caption']}"
         for index, item in enumerate(evidence_items, 1)
     )
-    try:
-        response = client.models.generate_content(
+    def _call():
+        return client.models.generate_content(
             model=GEMINI_MODEL,
             contents=(
                 "다음 증빙에 명시된 사건과 일시만 타임라인 JSON 배열로 정리하세요. "
@@ -158,6 +173,15 @@ async def generate_timeline_gemini(
                 temperature=0,
             ),
         )
+
+    response = await run_with_harness(
+        "generate_timeline",
+        lambda: asyncio.to_thread(_call),
+    )
+    if response is None:
+        return None
+
+    try:
         parsed = (
             [item.model_dump() for item in response.parsed]
             if isinstance(response.parsed, list)
@@ -165,5 +189,5 @@ async def generate_timeline_gemini(
         )
         return parsed if isinstance(parsed, list) else None
     except Exception as error:
-        logger.error("Gemini timeline generation failed: %s", error)
+        logger.error("Gemini timeline generation parsing failed: %s", error)
         return None
